@@ -1,0 +1,124 @@
+version: "3.5"
+services:
+  cosmic-calibration:
+    restart: always
+    build: ./mqtthandler
+    hostname: mqtthandler
+    container_name: mqtthandler
+    depends_on:
+      - orion
+      - mosquitto
+    expose:
+      - "4243"
+    ports:
+      - "4243:4243"
+    networks:
+      - default
+
+  mosquitto:
+    image: eclipse-mosquitto
+    hostname: mosquitto
+    container_name: mosquitto
+    expose:
+      - "1883"
+      - "9001"
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    networks:
+      - default
+    volumes:
+      - ./configuration/eclipse-mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    environment: 
+      - TZ=America/Sao_Paulo
+    restart: always
+
+  mongo-db:
+    image: mongo:3.6
+    hostname: mongo-db
+    container_name: mongo-db
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+    networks:
+      - default
+    command: --bind_ip_all --smallfiles
+    environment: 
+      - TZ=America/Sao_Paulo
+    volumes:
+      - mongo-db:/data
+    restart: always
+
+  orion:
+    image: fiware/orion:2.2.0
+    hostname: orion
+    container_name: fiware-orion
+    depends_on:
+      - mongo-db
+    networks:
+      - default
+    expose:
+      - "1026"
+    ports:
+      - "1026:1026"
+    command: -dbhost mongo-db -logLevel DEBUG -corsOrigin __ALL
+    environment: 
+      - TZ=America/Sao_Paulo
+    restart: always
+
+  crate-db:
+    image: crate/crate
+    hostname: crate-db
+    container_name: db-crate
+    ports:
+      # Admin UI
+      - "4200:4200"
+      # Transport protocol
+      - "4300:4300"
+      - "5436:5432"
+    expose: 
+      - "5432"
+    command: -Cnetwork.host=_eth0_ -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
+    environment: 
+      - TZ=America/Sao_Paulo
+    restart: always
+
+  quantum-leap:
+    image: smartsdk/quantumleap
+    hostname: quantum-leap
+    container_name: fiware-quantum-leap
+    ports:
+      - "8668:8668"
+    depends_on:
+      - orion
+      - crate-db
+    environment:
+      - CRATE_HOST=crate-db
+      - TZ=America/Sao_Paulo
+    restart: always
+    
+  postgresql:
+    image: postgres:9.6-alpine
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=root
+    volumes:
+      - ./configuration/postgresql/initdb:/docker-entrypoint-initdb.d
+      - postgresqldata:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:5-alpine
+    depends_on:
+      - mosquitto
+    restart: always
+    volumes:
+      - ./data/redis:/data
+        
+volumes:
+  virtuosodb: ~
+  mongo-db:
+  postgresqldata: 
+  cratedb:
