@@ -74,9 +74,9 @@ class WARTHOG_DEVICE:
     # Publish current state periodically
     ##############################################
     def PUBLISH_STATE(self,client):
-        self.DATA["command_list"]["value"] = (json.dumps(self.commandlist)).encode()
+        self.DATA["command_list"]["value"] = (json.dumps(commandlist)).encode()
         self.DATA["timestamp"]["value"] = int(time.time())
-        self.DATA["ready"]["value"] = 1
+        self.DATA["ready"]["value"] = len(self.commandlist) == 0
 
         print(json.dumps(self.DATA,indent=3))
 
