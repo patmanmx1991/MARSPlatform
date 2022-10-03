@@ -32,6 +32,7 @@ class WARTHOG_DEVICE:
             "start_time":        { "type":"Integer",  "metadata":{}, "value":int(time.time()) },
             "timestamp":         { "type":"Integer", "metadata": {}, "value":int(time.time()) },
             "command_list":      { "value": "", "type":"String", "metadata":{}}
+            "ready":              { "value": 1, "type":"Integer", "metadata":{}}
         }
 
         # Establish a new command list
@@ -73,8 +74,9 @@ class WARTHOG_DEVICE:
     # Publish current state periodically
     ##############################################
     def PUBLISH_STATE(self,client):
-        self.DATA["command_list"]["value"] = json.dumps(self.commandlist)
+        self.DATA["command_list"]["value"] = (json.dumps(self.commandlist)).encode()
         self.DATA["timestamp"]["value"] = int(time.time())
+        self.DATA["ready"]["value"] = 1
 
         print(json.dumps(self.DATA,indent=3))
 
@@ -156,8 +158,7 @@ class WARTHOG_DEVICE:
           else:
               print("Setting not found in device : ", key, command[key])
       return True
-
-
+    
 client=mqtt.Client()
 print("Connecting to ", MQTT_IP, MQTT_PORT)
 client.connect(MQTT_IP, int(MQTT_PORT),1)
