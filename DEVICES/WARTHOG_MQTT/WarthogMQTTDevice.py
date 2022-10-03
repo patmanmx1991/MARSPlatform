@@ -6,96 +6,142 @@ import base64
 import time
 import datetime
 import paho.mqtt.client as mqttClient
-from orionapi import *
 
 import paho.mqtt.client as mqtt
 
-MQTT_IP_ADDRESS = os.environ["MARS_MQTT_IP"]
-MQTT_PORT = os.environ["MARS_MQTT_PORT"]  
+MQTT_IP = os.environ["MARS_MQTT_IP"]
+MQTT_PORT = os.environ["MARS_MQTT_PORT"]
 
-COMMAND_TOPIC = "marsapi/v1/marsrover1/warthog/command"
-DATA_TOPIC = "marsapi/v1/marsrover1/warthog/data"
+class WARTHOG_DEVICE:
+    ##############################################
+    # Module Initializer
+    ##############################################
+    def __init__(self, client, device):
+        print("Starting Warthog Device : " + device)
+        self.device = device
+        self.client = client
 
-class MotionDevice():
-    def __init__(self, client):
+        # Setup client subscriptions
+        self.COMMAND_TOPIC = "marsapi/v1/marsrover1/{}/command".format(device)
+        self.DATA_TOPIC    = "marsapi/v1/marsrover1/{}/data".format(device)
 
-        print("Starting Motion Device")
+        # Establish default polling dataset
         self.DATA = {
-            "location":          { "type":"geo:json", "meta":{}, "value":{ "type":"Point", "coordinates":[0.0,0.0] } },
-            "battery":           { "type":"Number", "meta":{}, "value":"12.1" },
-            "start_time":        { "type":"Integer", "meta":{}, "value":'0' },
-            "command_timestamp": { "value":int(time.time()), "type":"Integer", "meta":{}},
-            "command_list":      { "value":json.dumps( commandlist ), "type":"String", "meta":{}}
+            "location":          { "type":"geo:json", "metadata":{}, "value":{ "type":"Point", "coordinates":[0.0,0.0] } },
+            "battery":           { "type":"Number",   "metadata": {}, "value":12.1 },
+            "start_time":        { "type":"Integer",  "metadata":{}, "value":int(time.time()) },
+            "timestamp":         { "type":"Integer", "metadata": {}, "value":int(time.time()) },
+            "command_list":      { "value": "", "type":"String", "metadata":{}}
         }
 
-        self.COMMAND_TOPIC
+        # Establish a new command list
+        self.commandlist = []
 
-    def on_connect(client, userdata, flags, rc):
+        # Publish State on BOOT
+        self.PUBLISH_STATE(self.client)
+
+    ##############################################
+    # Main MQTT Connecetion Commands (Required)
+    ##############################################
+    def on_connect(self,client, userdata, flags, rc):
         # This will be called once the client connects
-        print(f"Connected with result code {rc}")
+        print(f"{self.device} Connected with result code {rc}")
+        # Subscribe here
+        print("Subscribing to :", self.COMMAND_TOPIC)
+        client.subscribe(self.COMMAND_TOPIC)
 
-        # Subscribe here!
-        client.subscribe(COMMAND_TOPIC)
+    def on_message(self,client, userdata, msg):
+        print(f"{self.device} Message received [{msg.topic}]: {msg.payload}")
 
-    def on_message(client, userdata, msg):
-        print(f"Message received [{msg.topic}]: {msg.payload}")
+        # Parse JSON Object, should always be valid JSON
+        try:
+            jsonobj = json.loads(msg.payload.decode())
+        except:
+            print("Failed to parse MQTT JSON Object!")
+            return
 
         # Check only accept specific MQTT command messages
-        if (msg.topic != COMMAND_TOPIC): return
+        if (msg.topic == self.COMMAND_TOPIC):
+            # Run Command Parser
+            self.DEVICE_COMMAND(jsonobj)
 
-        # Parse JSON Object
-        jsonobj = json.loads(msg.payload.decode())
-        DEVICE_COMMAND(client, jsonobj)
+        # Always update the device entity after a command or setting
+        self.PUBLISH_STATE(client)
 
-        # Always update the device entity
-        PUBLISH_STATE(client)
 
-    def PUBLISH_STATE(client):
-      (result,mid)=client.publish(DATA_TOPIC, json.dumps(datastream) ,2)
-      print(result,mid)
+    ##############################################
+    # Publish current state periodically
+    ##############################################
+    def PUBLISH_STATE(self,client):
+        self.DATA["command_list"]["value"] = json.dumps(self.commandlist)
+        self.DATA["timestamp"]["value"] = int(time.time())
 
-    def DEVICE_LOOP(client):
-      time.sleep(1)
-      print("Current Command List", commandlist)
+        print(json.dumps(self.DATA,indent=3))
 
-      if len(commandlist["commands"]) == 0: continue
+        (result,mid)=client.publish(self.DATA_TOPIC,
+                                  json.dumps(self.DATA),
+                                  2)
+        print("Publish Result", result,mid)
 
-      commandlist["current_command"] = commandlist["commands"][0]
+    ##############################################
+    # Receive an MQTT Command
+    ##############################################
+    def DEVICE_COMMAND(self, jsonobj):
 
-      cmd = commandlist["current_command"]["command"]
-      dat = commandlist["current_command"]["data"]
-
-      if (cmd == "WAIT"): res = WAIT(dat)
-      if (cmd == "MOVE"): res = MOVE(dat)
-
-      # If returned true, command successful and can remove
-      if res == True:
-        del commandlist["commands"][0]
-        commandlist["current_command"] = ""
-
-      PublishState()
-      print("Current Command List", commandlist)
-
-    def DEVICE_COMMAND(client, jsonobj):
-        if jsonobj["command"] == "emergencystop": EMERGENCYSTOP()
-        if jsonobj["command"] == "clearcommandlist": CLEARCOMMANDLIST()
+        if jsonobj["command"] == "emergencystop":    self.EMERGENCYSTOP()
+        if jsonobj["command"] == "clearcommandlist": self.CLEARCOMMANDLIST()
 
         # Add the command to the master list of commands.
         print("Adding Command", jsonobj)
-        global DEVICE_DATA
-        DEVICE_DATA["command_list"].append( jsonobj )
+        self.commandlist.append( jsonobj )
 
+    ##############################################
+    # Main Event Processing Loop for the module.
+    # Should decide what to do, perform it, then
+    # publish the updated state. In the Warthog
+    # we iterate over a list of commands.
+    ##############################################
+    def UPDATE_STATE(self, client):
+      print(self.device + "Current Command List", self.commandlist)
+      self.PUBLISH_STATE(self.client)
+
+      # Introduce a lag for updates.
+      time.sleep(0.5)
+
+      # If no commands to perform return
+      if len(self.commandlist) == 0: return
+
+      # Get the latest command
+      cmd = self.commandlist[0]["command"]
+      dat = self.commandlist[0]["data"]
+
+      # Perform specific commands.
+      if (cmd == "WAIT"): res = self.WAIT(dat)
+      if (cmd == "MOVE"): res = self.MOVE(dat)
+      if (cmd == "SET"): res = self.SET(dat)
+
+      # If returned true, command successful and can remove
+      if res == True:
+        del self.commandlist[0]
+
+      self.PUBLISH_STATE(self.client)
+      print("Current Command List", self.commandlist)
+
+
+    ##############################################
+    # Add all possible commands
+    ##############################################
     def EMERGENCYSTOP( self, command=None ):
       print("EMERGENCY STOP")
       return True
 
     def CLEARCOMMANDLIST( self, command=None ):
       print("CLEARING COMMAND LIST")
-      commandlist["commands"] = []
-      commandlist["current_command"] = ""
+      self.commandlist = []
       return True
 
     def WAIT( command ):
+      print("WAITIING")
       time.sleep( self, command['time'] )
       return True
 
@@ -104,17 +150,26 @@ class MotionDevice():
       time.sleep(1)
       return True
 
+    def SET( self, command ):
+      for key in command:
+          if key in self.DATA: self.DATA[key] = command[key]
+          else:
+              print("Setting not found in device : ", key, command[key])
+      return True
+
 
 client=mqtt.Client()
-client.connect(MQTT_IP_ADDRESS, int(MQTT_IP_PORT),60)
+print("Connecting to ", MQTT_IP, MQTT_PORT)
+client.connect(MQTT_IP, int(MQTT_PORT),1)
 
-warthog = WARTHOG_DEVICE(client)
+warthog = WARTHOG_DEVICE(client, "warthog")
 client.on_connect = warthog.on_connect
 client.on_message = warthog.on_message
 
 client.loop_start()
+
 while True:
-    warthog.DEVICE_LOOP()
-    
+    warthog.UPDATE_STATE(client)
+
 client.loop_stop()
 client.disconnect()

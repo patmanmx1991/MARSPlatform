@@ -10,7 +10,7 @@ from orionapi import *
 
 import paho.mqtt.client as mqtt
 
-orion = orion_handler("")
+orion = orion_handler("http://35.177.218.103","1026")
 
 commandlist = {
 "current_command": "",
@@ -20,7 +20,7 @@ commandlist = {
 device_entity = {
     "location": { "type":"geo:json", "meta":{}, "value":{ "type":"Point", "coordinates":[0.0,0.0] } },
     "battery":  { "type":"Number", "meta":{}, "value":"12.1" },
-    "start_time": { "type":"Integer", "meta":{}, "value":'0' }
+    "start_time": { "type":"Integer", "meta":{}, "value":'0' },
     "command_timestamp":{"value":int(time.time()), "type":"Integer", "meta":{}},
     "command_list":{"value":json.dumps( commandlist ), "type":"String", "meta":{}}
 }
@@ -78,7 +78,7 @@ def on_message(client, userdata, msg):
     PublishState()
     
 client=mqtt.Client()
-client.connect("
+client.connect("35.177.218.103",1026,1)
 
 
 client.on_connect = on_connect
