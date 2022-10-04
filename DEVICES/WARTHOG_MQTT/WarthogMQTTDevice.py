@@ -20,10 +20,17 @@ class WARTHOG_DEVICE:
         print("Starting Warthog Device : " + device)
         self.device = device
         self.client = client
+        self.servertime = -1
+        self.ServerConnected = False
 
         # Setup client subscriptions
-        self.COMMAND_TOPIC = "marsapi/v1/marsrover1/{}/command".format(device)
-        self.DATA_TOPIC    = "marsapi/v1/marsrover1/{}/data".format(device)
+        self.COMMAND_TOPIC  = "marsapi/v1/marsrover1/{}/command".format(device)
+        self.DATA_TOPIC     = "marsapi/v1/marsrover1/{}/data".format(device)
+        self.ACK_TOPIC      = "marsapi/v1/message"
+        self.SERVERHB_TOPIC = "marsapi/v1/heartbeat"
+
+        # Setup temporary topic subscription to get GPS from any onboard source
+        self.POSITION_TOPIC = "marsapi/v1/marsrover1/position/data"
 
         # Establish default polling dataset
         self.DATA = {
@@ -44,15 +51,26 @@ class WARTHOG_DEVICE:
     ##############################################
     # Main MQTT Connecetion Commands (Required)
     ##############################################
+    def acknowledge(self, msg):
+        self.client.publish(self.ACK_TOPIC, "[" + self.device + "] " + msg + " : " + str(int(time.time())),2)
+
     def on_connect(self,client, userdata, flags, rc):
         # This will be called once the client connects
         print(f"{self.device} Connected with result code {rc}")
         # Subscribe here
         print("Subscribing to :", self.COMMAND_TOPIC)
         client.subscribe(self.COMMAND_TOPIC)
+        client.subscribe(self.SERVERHB_TOPIC)
+        client.subscribe(self.POSITION_TOPIC)
+
+        self.ServerConnected = True
+
+        self.acknowledge("CONNECTED")
+
 
     def on_message(self,client, userdata, msg):
         print(f"{self.device} Message received [{msg.topic}]: {msg.payload}")
+        self.acknowledge("MESSAGE RECEIVED {msg.topic} {msg.payload}")
 
         # Parse JSON Object, should always be valid JSON
         try:
@@ -66,9 +84,17 @@ class WARTHOG_DEVICE:
             # Run Command Parser
             self.DEVICE_COMMAND(jsonobj)
 
+        if (msg.topic == self.POSITION_TOPIC):
+            self.UPDATE_POSITION(jsonobj)
+
+        if (msg.topic == self.SERVERHB_TOPIC):
+            self.servertime = time.time()
+
         # Always update the device entity after a command or setting
         self.PUBLISH_STATE(client)
 
+    def check_server_connection(self):
+        if time.time() - self.servertime > 5: self.ServerConnected = False
 
     ##############################################
     # Publish current state periodically
@@ -105,6 +131,7 @@ class WARTHOG_DEVICE:
     ##############################################
     def UPDATE_STATE(self, client):
       print(self.device + "Current Command List", self.commandlist)
+
       self.PUBLISH_STATE(self.client)
 
       # Introduce a lag for updates.
