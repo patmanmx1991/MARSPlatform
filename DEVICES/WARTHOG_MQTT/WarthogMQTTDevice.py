@@ -31,7 +31,7 @@ class WARTHOG_DEVICE:
             "battery":           { "type":"Number",   "metadata": {}, "value":12.1 },
             "start_time":        { "type":"Integer",  "metadata":{}, "value":int(time.time()) },
             "timestamp":         { "type":"Integer", "metadata": {}, "value":int(time.time()) },
-            "command_list":      { "value": "", "type":"String", "metadata":{}}
+            "command_list":      { "value": "", "type":"String", "metadata":{}},
             "ready":              { "value": 1, "type":"Integer", "metadata":{}}
         }
 
