@@ -36,6 +36,8 @@ class WARTHOG_DEVICE:
         self.DATA = {
             "location":          { "type":"geo:json", "metadata":{}, "value":{ "type":"Point", "coordinates":[0.0,0.0] } },
             "battery":           { "type":"Number",   "metadata": {}, "value":12.1 },
+            "altitude":           { "type":"Number",   "metadata": {}, "value":0.0 },
+            "heading":           { "type":"Number",   "metadata": {}, "value":0.0 },
             "start_time":        { "type":"Integer",  "metadata":{}, "value":int(time.time()) },
             "timestamp":         { "type":"Integer", "metadata": {}, "value":int(time.time()) },
             "command_list":      { "value": "", "type":"String", "metadata":{}},
@@ -70,7 +72,7 @@ class WARTHOG_DEVICE:
 
     def on_message(self,client, userdata, msg):
         print(f"{self.device} Message received [{msg.topic}]: {msg.payload}")
-        self.acknowledge("MESSAGE RECEIVED {msg.topic} {msg.payload}")
+        #self.acknowledge("MESSAGE RECEIVED {msg.topic} {msg.payload}")
 
         # Parse JSON Object, should always be valid JSON
         try:
@@ -81,17 +83,16 @@ class WARTHOG_DEVICE:
 
         # Check only accept specific MQTT command messages
         if (msg.topic == self.COMMAND_TOPIC):
+            self.acknowledge("COMMAND RECEIVED {msg.topic} {msg.payload}")
             # Run Command Parser
             self.DEVICE_COMMAND(jsonobj)
+            self.PUBLISH_STATE(client)
 
         if (msg.topic == self.POSITION_TOPIC):
             self.UPDATE_POSITION(jsonobj)
 
         if (msg.topic == self.SERVERHB_TOPIC):
             self.servertime = time.time()
-
-        # Always update the device entity after a command or setting
-        self.PUBLISH_STATE(client)
 
     def check_server_connection(self):
         if time.time() - self.servertime > 5: self.ServerConnected = False
@@ -111,6 +112,12 @@ class WARTHOG_DEVICE:
                                   json.dumps(self.DATA),
                                   2)
         print("Publish Result", result,mid)
+
+
+    def UPDATE_POSITION(self, jsonobj):
+       self.DATA["location"] = jsonobj["location"]
+       self.DATA["altitude"] = jsonobj["altitude"]
+       self.DATA["heading"]  = jsonobj["heading"]
 
     ##############################################
     # Receive an MQTT Command
