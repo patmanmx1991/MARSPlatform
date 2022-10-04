@@ -1,0 +1,12 @@
+[Unit]
+Description=Gamma Pi Handler
+After=multi-user.target
+
+[Service]
+Type=simple
+Environment="LOCALAPPDATA=''"
+ExecStart=/usr/bin/python3 /home/gammapi/GAMMA_MULTI/python/daq.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
