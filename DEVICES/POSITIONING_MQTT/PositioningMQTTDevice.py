@@ -14,10 +14,26 @@ from subprocess import Popen
 
 import paho.mqtt.client as mqtt
 from envirophat import light, motion, weather, leds
+import socket
 
+MQTT_IP = "35.177.218.103"
+MQTT_PORT = "1883"
 
-MQTT_IP = os.environ["MARS_MQTT_IP"]
-MQTT_PORT = os.environ["MARS_MQTT_PORT"]
+while True:
+ s = socket.socket()
+ address = MQTT_IP #127.0.0.1'
+ port = MQTT_PORT #80  # port number is a number, not string
+ try:
+    s.connect((address, port)) 
+    # originally, it was 
+    # except Exception, e: 
+    # but this syntax is not supported anymore. 
+ except Exception as e: 
+    print("something's wrong with %s:%d. Exception is %s" % (address, port, e))
+ finally:
+    s.close()
+    print("Connection Valid!")
+    break
 
 # Need to edit so that it regularly checks GPS
 class POSITIONING_DEVICE:
@@ -172,21 +188,23 @@ class POSITIONING_DEVICE:
 
       if not gps_data["GNGNS"]: return
 
-      self.DATA["altitude"]["value"] = gps_data["GNGNS"].altitude
-      self.DATA["location"]["value"]["coordinates"] = [gps_data["GNGNS"].longitude,gps_data["GNGNS"].latitude]
+      self.DATA["altitude"]["value"] = float(gps_data["GNGNS"].altitude)
+      self.DATA["location"]["value"]["coordinates"] = [float(gps_data["GNGNS"].longitude),float(gps_data["GNGNS"].latitude)]
 
       print(self.DATA)
 
     def LookForEnviroData(self):
-     self.DATA["heading"]["value"] = motion.heading()
-     self.DATA["pressure"]["value"] = weather.pressure()
-     self.DATA["temperature"]["value"] = weather.temperature()
+     self.DATA["heading"]["value"] = float(motion.heading())
+     self.DATA["pressure"]["value"] = float(weather.pressure())
+     self.DATA["temperature"]["value"] = float(weather.temperature())
      self.DATA["accelerometer"]["value"] = str(motion.accelerometer())[1:-1].replace(' ', '')
 
 
+time.sleep(30)
+
 client=mqtt.Client()
 print("Connecting to ", MQTT_IP, MQTT_PORT)
-client.connect(MQTT_IP, int(MQTT_PORT),1)
+client.connect(MQTT_IP, int(MQTT_PORT),30)
 
 position = POSITIONING_DEVICE(client, "position")
 client.on_connect = position.on_connect
